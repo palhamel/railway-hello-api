@@ -188,7 +188,7 @@ Railway har två tokentyper:
 - *Project token* — bara för deploys inifrån Railway-ekosystemet, ej för API-anrop
 - *Account token* (format `token_xxx`) — fullständiga API-rättigheter, detta är vad som krävs
 
-Hämtas under: Railway → Avatar → Account Settings → Tokens → Create token.
+Hämtas under: Railway → Avatar (nere till vänster) → Account Settings → Tokens → Create token.
 
 ---
 
@@ -387,6 +387,32 @@ VITE_API_URL=https://my-project-api.railway.internal
 ```
 
 Railway-interna URLer (`.railway.internal`) är inte publika — bara nåbara inom samma Railway-projekt. Publika API-anrop exponeras via Railway-domänen.
+
+---
+
+## PoC verifierad — 2026-04-23
+
+Hela flödet verifierat end-to-end:
+
+```
+git push main
+  → GitHub Actions bygger Docker-imagen
+  → Pushar ghcr.io/palhamel/railway-hello-api:latest + :<sha>
+  → curl mot Railway GraphQL API svarar {"serviceInstanceRedeploy": true}
+  → Railway drar ny image och startar om tjänsten
+  → https://railway-hello-api-production.up.railway.app/ svarar med korrekt commit-SHA i version-fältet
+```
+
+Bekräftat live-svar:
+```json
+{
+  "message": "Hello from Railway!",
+  "version": "8c2b32ebfb797ec54aa7198fb7246eeaa6c28d3c",
+  "timestamp": "2026-04-23T15:02:33.124Z"
+}
+```
+
+`version` matchar exakt commit-SHA → bevis på att rätt kod kör i produktion.
 
 ---
 
