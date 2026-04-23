@@ -210,14 +210,73 @@ Secrets (Railway-tokens, service-ID:n) lagras i GitHub Secrets, aldrig i koden. 
 
 ---
 
-## Miljövariabler i Railway
+## Vem bygger Docker-imagen?
 
-Railway injicerar dessa automatiskt — ingen `.env`-fil behövs:
+**GitHub Actions bygger, Railway kör bara.**
+
+Det är viktigt att förstå rollfördelningen:
+
+```
+GitHub Actions          GHCR                    Railway
+──────────────          ────                    ───────
+Klonar kod         →    Lagrar imagen      →    Drar imagen
+Kör Dockerfile                                  Startar containern
+Pushar imagen                                   Injicerar PORT
+                                                Sköter TLS + domän
+```
+
+Railway bygger aldrig Dockerfilen. Det är en ren runtime — den drar en färdigbyggd image från GHCR och startar den. Det betyder att:
+
+- Bygget är reproducerbart och oberoende av Railway
+- Man kan byta hosting (Fly.io, Render, egen VPS) utan att ändra ett enda byggsteg
+- Railway-specifik konfiguration påverkar inte hur appen byggs
+
+---
+
+## Sätta upp Railway första gången (manuell initial deploy)
+
+Den allra första deployn görs manuellt i Railway-dashboarden — GHA-workflowen kan inte trigga Railway förrän Secrets är konfigurerade.
+
+**Steg:**
+
+1. Skapa nytt Railway-projekt → **New Service** → **Docker Image**
+2. Ange image: `ghcr.io/palhamel/railway-hello-api:latest`
+3. Railway drar imagen och deployar direkt
+4. Under **Networking → Public Networking** → klicka **Generate Domain**
+5. Appen är live på `https://<namn>.up.railway.app`
+
+**Varför fungerar det utan några miljövariabler?**
+- `PORT` injiceras automatiskt av Railway för alla tjänster — behöver aldrig sättas manuellt
+- `APP_VERSION` har fallback `'dev'` i koden — appen kraschar inte utan den
+
+Första manuella deploy bekräftade att imagen fungerar i Railway-miljön innan automatiseringen kopplades in.
+
+---
+
+## Miljövariabler i Railway
 
 | Variabel | Sätts av | Värde |
 |----------|----------|-------|
-| `PORT` | Railway | Dynamisk per deploy |
-| `APP_VERSION` | Manuellt i Railway | t.ex. commit-SHA eller `1.0.0` |
+| `PORT` | Railway (automatiskt) | Dynamisk per deploy, aldrig sätt manuellt |
+| `APP_VERSION` | Bakat i imagen av GHA | Commit-SHA, t.ex. `e11b096...` |
+
+### APP_VERSION — bakat i imagen, inte en Railway-variabel
+
+Första deployn visade `version: "dev"` eftersom `APP_VERSION` saknades. Lösningen var att baka in commit-SHA i imagen vid bygget istället för att sätta en Railway-variabel:
+
+**Dockerfile:**
+```dockerfile
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
+```
+
+**deploy.yml:**
+```yaml
+build-args: |
+  APP_VERSION=${{ github.sha }}
+```
+
+Varje image har nu commit-SHA inbakat från byggtillfället. Ingen Railway-variabel behövs, och man kan alltid se exakt vilken kod som kör genom att titta på `/`-endpointen.
 
 ---
 
